@@ -1,82 +1,103 @@
-// Importa o Service que contém as regras de negócio
+// ============================================================
+// controller/PessoaController.js — handlers HTTP de Pessoa
+// ============================================================
+// A camada Controller é a ponte entre o HTTP e o Service.
+// Responsabilidades:
+//   1. Ler dados da requisição (req.params, req.body)
+//   2. Chamar o método correto do Service
+//   3. Responder com o status HTTP e o JSON adequados
+//
+// Tratamento de erros:
+//   Cada método tem seu próprio try/catch.
+//   Se o Service lançar um erro com err.statusCode, usamos esse código.
+//   Caso contrário, respondemos com 500 (erro interno inesperado).
+//
+// Fluxo resumido:
+//   Route → Controller → Service → Repository → Banco
+
 const PessoaService = require('../service/PessoaService');
 
-// A camada Controller é responsável por receber as requisições HTTP,
-// chamar o Service adequado e devolver a resposta HTTP ao cliente.
-// Ela NÃO contém regras de negócio nem queries SQL.
 class PessoaController {
 
   constructor() {
-    // Instancia o service para poder usar seus métodos
+    // Instancia o Service — toda lógica de negócio fica lá
     this.service = new PessoaService();
   }
 
-  // Trata GET /pessoas — retorna todas as pessoas
+  // GET /pessoas
+  // 200 OK — retorna array com todas as pessoas
   async listarTodos(req, res) {
     try {
       const pessoas = await this.service.listarTodos();
-
-      // Status 200 = OK — retorna o array de pessoas em formato JSON
       res.status(200).json(pessoas);
-    } catch (erro) {
-      // Status 500 = Erro interno do servidor (problema inesperado)
-      res.status(500).json({ erro: erro.message });
+    } catch (err) {
+      // listarTodos não tem validações — qualquer erro aqui é inesperado
+      res.status(500).json({ erro: 'Erro interno do servidor' });
     }
   }
 
-  // Trata GET /pessoas/:id — retorna uma pessoa específica
+  // GET /pessoas/:id
+  // 200 OK — pessoa encontrada
+  // 404 Not Found — id não existe (err.statusCode = 404 vindo do Service)
   async buscarPorId(req, res) {
     try {
-      // req.params.id captura o valor do :id na URL (ex: /pessoas/3 → id = "3")
+      // req.params.id contém o valor dinâmico da URL (ex: /pessoas/3 → id = '3')
       const pessoa = await this.service.buscarPorId(req.params.id);
-
-      // Status 200 = OK
       res.status(200).json(pessoa);
-    } catch (erro) {
-      // Status 404 = Não encontrado
-      res.status(404).json({ erro: erro.message });
+    } catch (err) {
+      // err.statusCode é 404 se o Service não encontrou a pessoa
+      // || 500 garante um fallback caso o erro não tenha statusCode
+      res.status(err.statusCode || 500).json({ erro: err.message });
     }
   }
 
-  // Trata POST /pessoas — cria uma nova pessoa
+  // POST /pessoas
+  // 201 Created — pessoa criada com sucesso
+  // 400 Bad Request — campo inválido ou ausente (err.statusCode = 400 do Service)
   async criar(req, res) {
     try {
-      // req.body contém os dados enviados pelo cliente no corpo da requisição (JSON)
+      // req.body contém o JSON enviado pelo cliente no corpo da requisição
       const pessoa = await this.service.criar(req.body);
-
-      // Status 201 = Created — indica que um recurso foi criado com sucesso
       res.status(201).json(pessoa);
-    } catch (erro) {
-      // Status 400 = Bad Request — os dados enviados pelo cliente são inválidos
-      res.status(400).json({ erro: erro.message });
+    } catch (err) {
+      // SequelizeValidationError: validação de modelo falhou dentro do Sequelize
+      // (ex: allowNull: false violado diretamente no banco)
+      if (err.name === 'SequelizeValidationError') {
+        const mensagens = err.errors.map(e => e.message).join('; ');
+        return res.status(400).json({ erro: mensagens });
+      }
+      // err.statusCode = 400 se o Service rejeitou os dados
+      res.status(err.statusCode || 500).json({ erro: err.message });
     }
   }
 
-  // Trata PUT /pessoas/:id — atualiza todos os dados de uma pessoa
+  // PUT /pessoas/:id
+  // 200 OK — pessoa atualizada com sucesso
+  // 400 Bad Request — dados inválidos
+  // 404 Not Found — id não existe
   async atualizar(req, res) {
     try {
-      // Combina o id da URL com os dados do corpo para atualizar
       const pessoa = await this.service.atualizar(req.params.id, req.body);
-
-      // Status 200 = OK
       res.status(200).json(pessoa);
-    } catch (erro) {
-      // Se o erro menciona "não encontrada", retorna 404; caso contrário, 400
-      const status = erro.message.includes('não encontrada') ? 404 : 400;
-      res.status(status).json({ erro: erro.message });
+    } catch (err) {
+      if (err.name === 'SequelizeValidationError') {
+        const mensagens = err.errors.map(e => e.message).join('; ');
+        return res.status(400).json({ erro: mensagens });
+      }
+      res.status(err.statusCode || 500).json({ erro: err.message });
     }
   }
 
-  // Trata DELETE /pessoas/:id — remove uma pessoa
+  // DELETE /pessoas/:id
+  // 204 No Content — removida com sucesso (sem corpo na resposta)
+  // 404 Not Found — id não existe
   async deletar(req, res) {
     try {
-      const pessoa = await this.service.deletar(req.params.id);
-
-      // Retorna uma mensagem de confirmação junto com os dados da pessoa deletada
-      res.status(200).json({ mensagem: 'Pessoa deletada com sucesso', pessoa });
-    } catch (erro) {
-      // Status 404 = Não encontrado
-      res.status(404).json({ erro: erro.message });
+      await this.service.deletar(req.params.id);
+      // 204 = sucesso, mas sem retornar dados (a pessoa foi deletada, não há o que mostrar)
+      res.status(204).send();
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ erro: err.message });
     }
   }
 }

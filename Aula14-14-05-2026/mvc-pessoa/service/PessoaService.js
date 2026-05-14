@@ -1,62 +1,97 @@
-// Importa o Repository para delegar as operações de banco de dados
+// ============================================================
+// service/PessoaService.js — regras de negócio da entidade Pessoa
+// ============================================================
+// A camada Service fica entre o Controller e o Repository.
+// É aqui que ficam as validações e regras de negócio:
+//   - "nome é obrigatório"
+//   - "idade não pode ser negativa"
+//   - "id deve existir antes de atualizar"
+//
+// Quando algo está errado, o Service lança um Error com a
+// propriedade statusCode definida. O Controller captura esse
+// erro e usa o statusCode para montar a resposta HTTP correta.
+
 const PessoaRepository = require('../repository/PessoaRepository');
 
-// A camada Service contém as REGRAS DE NEGÓCIO da aplicação.
-// Ela fica entre o Controller (que trata HTTP) e o Repository (que acessa o banco).
-// É aqui que validamos dados, aplicamos lógica e tomamos decisões.
 class PessoaService {
 
   constructor() {
-    // Instancia o repository para poder usar seus métodos
+    // Instancia o Repository — único ponto de acesso ao banco para Pessoa
     this.repository = new PessoaRepository();
   }
 
-  // Retorna a lista de todas as pessoas — sem regra de negócio adicional aqui
+  // Retorna todas as pessoas — sem regras de negócio, apenas repassa
   async listarTodos() {
     return await this.repository.buscarTodos();
   }
 
-  // Busca uma pessoa por id e lança um erro se ela não existir
+  // Busca uma pessoa pelo id.
+  // Se não existir, lança um erro com statusCode 404 (Not Found).
+  // O Controller vai capturar esse erro e responder com status 404.
   async buscarPorId(id) {
     const pessoa = await this.repository.buscarPorId(id);
 
-    // Regra de negócio: se não encontrou, lançamos um erro com mensagem clara
-    // O Controller vai capturar esse erro e devolver o status HTTP correto
-    if (!pessoa) throw new Error(`Pessoa com id ${id} não encontrada`);
+    if (!pessoa) {
+      // Cria um Error comum e adiciona a propriedade statusCode
+      // Isso elimina a necessidade de uma classe de erro separada
+      const err = new Error(`Pessoa com id ${id} não encontrada`);
+      err.statusCode = 404;
+      throw err;
+    }
 
     return pessoa;
   }
 
-  // Valida e cria uma nova pessoa
+  // Valida os dados antes de criar.
+  // Lança erro 400 (Bad Request) se qualquer campo obrigatório estiver ausente ou inválido.
   async criar(dados) {
-    // Regras de negócio: campos obrigatórios e valores válidos
-    if (!dados.nome) throw new Error('Nome é obrigatório');
-    if (!dados.idade || dados.idade < 0) throw new Error('Idade inválida');
-    if (!dados.altura || dados.altura <= 0) throw new Error('Altura inválida');
+    if (!dados.nome) {
+      const err = new Error('Nome é obrigatório');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!dados.idade || dados.idade < 0) {
+      const err = new Error('Idade inválida');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!dados.altura || dados.altura <= 0) {
+      const err = new Error('Altura inválida');
+      err.statusCode = 400;
+      throw err;
+    }
 
-    // Somente chama o banco se os dados passaram nas validações
     return await this.repository.criar(dados);
   }
 
-  // Valida e atualiza uma pessoa existente
+  // Valida que o id existe e que os novos dados são válidos antes de atualizar.
   async atualizar(id, dados) {
-    // Primeiro verifica se a pessoa existe (reutilizando o método buscarPorId)
-    // Se não existir, o erro já é lançado dentro do buscarPorId
+    // Reutiliza buscarPorId — já lança 404 se não encontrar
     await this.buscarPorId(id);
 
-    // Valida os dados novos antes de enviar ao banco
-    if (!dados.nome) throw new Error('Nome é obrigatório');
-    if (!dados.idade || dados.idade < 0) throw new Error('Idade inválida');
-    if (!dados.altura || dados.altura <= 0) throw new Error('Altura inválida');
+    if (!dados.nome) {
+      const err = new Error('Nome é obrigatório');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!dados.idade || dados.idade < 0) {
+      const err = new Error('Idade inválida');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!dados.altura || dados.altura <= 0) {
+      const err = new Error('Altura inválida');
+      err.statusCode = 400;
+      throw err;
+    }
 
     return await this.repository.atualizar(id, dados);
   }
 
-  // Verifica se a pessoa existe e a remove
+  // Verifica se a pessoa existe antes de deletar.
+  // Se não existir, buscarPorId já lança o 404.
   async deletar(id) {
-    // Garante que a pessoa existe antes de tentar deletar
     await this.buscarPorId(id);
-
     return await this.repository.deletar(id);
   }
 }
