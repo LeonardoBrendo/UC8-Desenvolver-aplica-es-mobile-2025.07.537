@@ -1,64 +1,62 @@
-// ============================================================
-// app.js — ponto de entrada da aplicação
-// Responsável por: configurar middlewares, registrar rotas
-// e conectar ao banco antes de subir o servidor.
-// ============================================================
-
-// dotenv lê o arquivo .env e injeta as variáveis em process.env
-// Deve ser chamado ANTES de qualquer require que use process.env
 require('dotenv').config();
 
-const express = require('express');
-const morgan  = require('morgan');
+const express      = require('express');
+const helmet       = require('helmet');
+const cors         = require('cors');
+const logger       = require('./config/logger');
+const sequelize    = require('./config/sequelize');
+const swaggerUi    = require('swagger-ui-express');
+const swaggerSpec  = require('./config/swagger');
+const errorHandler = require('./middleware/errorHandler');
 
-// Importa os roteadores de cada entidade
+require('./model/index');
+
+const authRoute   = require('./route/AuthRoute');
 const pessoaRoute = require('./route/PessoaRoute');
 const carroRoute  = require('./route/CarroRoute');
 
-// Swagger — documentação interativa dos endpoints
-const swaggerUi   = require('swagger-ui-express');
-const swaggerSpec = require('./config/swagger');
-
-// Instância do Sequelize (conexão com o PostgreSQL)
-const sequelize   = require('./config/sequelize');
-
-// Importar o index de models força o registro das associações
-// (Pessoa.hasMany / Carro.belongsTo) antes do sync()
-require('./model/index');
-
-// Cria a aplicação Express
-const app = express();
-
-// Porta lida do .env; usa 3000 como padrão se não estiver definida
+const app   = express();
 const PORTA = process.env.PORT || 3000;
 
-// ─── Middlewares globais ─────────────────────────────────────
-// morgan 'dev' exibe no console: método, rota, status e tempo de resposta
-// Exemplo: GET /pessoas 200 12.345 ms - 87
-app.use(morgan('dev'));
+// ─── Segurança ────────────────────────────────────────────────
+// helmet adiciona ~12 headers HTTP de segurança automaticamente
+app.use(helmet());
 
-// Permite que o Express leia JSON no corpo (req.body) das requisições
+// cors define quais origens podem chamar a API
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+
+// ─── Parsing ──────────────────────────────────────────────────
 app.use(express.json());
 
-// ─── Rotas ───────────────────────────────────────────────────
-// Swagger UI disponível em /api-docs
+// ─── Log de requisições HTTP via Winston ─────────────────────
+app.use((req, _res, next) => {
+  logger.info(`${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// ─── Documentação ────────────────────────────────────────────
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Todas as rotas de pessoa ficam sob o prefixo /pessoas
-app.use('/pessoas', pessoaRoute);
+// ─── Rotas públicas ───────────────────────────────────────────
+app.use('/auth', authRoute);
 
-// Todas as rotas de carro ficam sob o prefixo /carros
+// ─── Rotas privadas (JWT obrigatório) ─────────────────────────
+app.use('/pessoas', pessoaRoute);
 app.use('/carros',  carroRoute);
 
-// ─── Inicialização ───────────────────────────────────────────
-// sequelize.sync() verifica se as tabelas existem e as cria se necessário.
-// Não apaga dados existentes (ao contrário de sync({ force: true })).
+// ─── Middleware de erro global ────────────────────────────────
+// Deve ser registrado APÓS todas as rotas
+app.use(errorHandler);
+
+// ─── Inicialização ────────────────────────────────────────────
 sequelize.sync().then(() => {
   app.listen(PORTA, () => {
-    console.log(`Servidor rodando em http://localhost:${PORTA}`);
-    console.log(`Documentação Swagger: http://localhost:${PORTA}/api-docs`);
+    logger.info(`Servidor rodando em http://localhost:${PORTA}`);
+    logger.info(`Swagger disponível em http://localhost:${PORTA}/api-docs`);
   });
 }).catch(err => {
-  // Se a conexão com o banco falhar, o servidor não deve subir
-  console.error('Erro ao conectar com o banco de dados:', err.message);
+  logger.error(`Erro ao conectar com o banco: ${err.message}`);
+  process.exit(1);
 });
+
+module.exports = app;
