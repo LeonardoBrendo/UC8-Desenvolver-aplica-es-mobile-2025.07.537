@@ -1,36 +1,20 @@
-// ============================================================
-// route/PessoaRoute.js — define os endpoints de Pessoa
-// ============================================================
-// A camada Route conecta uma URL + método HTTP ao método
-// correto do Controller. Não contém lógica de negócio.
-//
-// Padrão de registro:
-//   router.MÉTODO(caminho, (req, res) => controller.método(req, res))
-//
-// A arrow function é necessária para preservar o 'this' do Controller.
-// Sem ela (ex: router.get('/', controller.listarTodos))
-// o 'this' dentro do método seria undefined.
-
 const { Router } = require('express');
 const PessoaController = require('../controller/PessoaController');
+const autenticar       = require('../middleware/authMiddleware');
+const validate         = require('../middleware/validate');
+const { pessoaCriarSchema, pessoaAtualizarSchema } = require('../validation/pessoaSchema');
 
 const router     = Router();
 const controller = new PessoaController();
 
-// GET /pessoas → lista todas as pessoas
-router.get('/', (req, res) => controller.listarTodos(req, res));
+// Todas as rotas abaixo exigem token JWT válido
+router.use(autenticar);
 
-// GET /pessoas/:id → busca uma pessoa pelo id
-// :id é um parâmetro dinâmico acessível via req.params.id
-router.get('/:id', (req, res) => controller.buscarPorId(req, res));
+router.get('/',     (req, res, next) => controller.listarTodos(req, res, next));
+router.get('/:id',  (req, res, next) => controller.buscarPorId(req, res, next));
 
-// POST /pessoas → cria uma nova pessoa (dados no corpo da requisição)
-router.post('/', (req, res) => controller.criar(req, res));
-
-// PUT /pessoas/:id → atualiza todos os dados de uma pessoa existente
-router.put('/:id', (req, res) => controller.atualizar(req, res));
-
-// DELETE /pessoas/:id → remove uma pessoa pelo id
-router.delete('/:id', (req, res) => controller.deletar(req, res));
+router.post('/',    validate(pessoaCriarSchema),    (req, res, next) => controller.criar(req, res, next));
+router.put('/:id',  validate(pessoaAtualizarSchema),(req, res, next) => controller.atualizar(req, res, next));
+router.delete('/:id',                               (req, res, next) => controller.deletar(req, res, next));
 
 module.exports = router;

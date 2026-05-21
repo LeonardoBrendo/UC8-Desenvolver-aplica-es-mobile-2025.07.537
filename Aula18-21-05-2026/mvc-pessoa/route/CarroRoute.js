@@ -1,32 +1,23 @@
-// ============================================================
-// route/CarroRoute.js — define os endpoints de Carro
-// ============================================================
-
 const { Router } = require('express');
 const CarroController = require('../controller/CarroController');
+const autenticar      = require('../middleware/authMiddleware');
+const validate        = require('../middleware/validate');
+const { carroCriarSchema, carroAtualizarSchema } = require('../validation/carroSchema');
 
 const router     = Router();
 const controller = new CarroController();
 
-// IMPORTANTE: a rota /pessoa/:pessoaId DEVE ser registrada ANTES de /:id.
-// Se /:id viesse primeiro, o Express interpretaria a string "pessoa"
-// como um id numérico e chamaria buscarPorId em vez de buscarPorPessoa.
-// Rotas mais específicas sempre antes das mais genéricas.
-router.get('/pessoa/:pessoaId', (req, res) => controller.buscarPorPessoa(req, res));
+// Todas as rotas abaixo exigem token JWT válido
+router.use(autenticar);
 
-// GET /carros → lista todos os carros (com dados da pessoa)
-router.get('/', (req, res) => controller.listarTodos(req, res));
+// Rota mais específica antes da genérica /:id
+router.get('/pessoa/:pessoaId', (req, res, next) => controller.buscarPorPessoa(req, res, next));
 
-// GET /carros/:id → busca um carro pelo id
-router.get('/:id', (req, res) => controller.buscarPorId(req, res));
+router.get('/',     (req, res, next) => controller.listarTodos(req, res, next));
+router.get('/:id',  (req, res, next) => controller.buscarPorId(req, res, next));
 
-// POST /carros → cria um novo carro (pessoaId obrigatório no body)
-router.post('/', (req, res) => controller.criar(req, res));
-
-// PUT /carros/:id → atualiza os dados de um carro
-router.put('/:id', (req, res) => controller.atualizar(req, res));
-
-// DELETE /carros/:id → remove um carro
-router.delete('/:id', (req, res) => controller.deletar(req, res));
+router.post('/',    validate(carroCriarSchema),    (req, res, next) => controller.criar(req, res, next));
+router.put('/:id',  validate(carroAtualizarSchema),(req, res, next) => controller.atualizar(req, res, next));
+router.delete('/:id',                              (req, res, next) => controller.deletar(req, res, next));
 
 module.exports = router;

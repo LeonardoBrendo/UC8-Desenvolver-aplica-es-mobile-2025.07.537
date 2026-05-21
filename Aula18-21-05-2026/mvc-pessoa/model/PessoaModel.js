@@ -40,6 +40,23 @@ Pessoa.init({
 
   cidade: {
     type: DataTypes.STRING(100)
+  },
+
+  // ─── Campos de autenticação ───────────────────────────────
+
+  email: {
+    type: DataTypes.STRING(150), // VARCHAR(150) — tamanho suficiente para emails reais
+    allowNull: false,             // NOT NULL — obrigatório no cadastro
+    unique: true                  // UNIQUE — não podem existir dois cadastros com o mesmo email
+  },
+
+  senha: {
+    // A senha nunca é salva como texto puro.
+    // O bcrypt transforma "minhasenha123" em um hash de 60 caracteres,
+    // por isso o tipo é STRING(255) — espaço suficiente para o hash.
+    // Exemplo de hash: $2a$10$Xk9wQZv...
+    type: DataTypes.STRING(255),
+    allowNull: false // NOT NULL — obrigatório no cadastro
   }
 
 }, {
